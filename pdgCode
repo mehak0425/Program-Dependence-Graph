@@ -1,0 +1,401 @@
+#include <iostream>
+#include <string>
+#include<string.h>
+#include <fstream>
+#include <graphics.h>
+#define MAX 100
+using namespace std;
+
+struct node
+{
+  int info;
+  struct node *next;
+};
+node *top=NULL;
+node *bottom=NULL;
+void push(int value);
+void pop();
+bool isEmpty();
+
+int M[MAX][MAX];
+int lines;
+//calculate nmbr of decisions
+void calculate(ofstream& out,ifstream& in);
+//number the file
+void number(ifstream& in,ofstream& out);
+//find Data Dependance matrix
+void dataDependance(ifstream& outfile,ofstream& solution);
+//find Control Dependance matrix
+void cdg(ifstream& outfile,ofstream& solution);
+//draw Control Dependance Graph
+void drawGraph(int m[MAX][MAX],int);
+//draw Data Dependance Graph
+void drawGraph2(int lines,int m[MAX][MAX]);
+//PDG matrix
+void pdg();
+//draw PDG
+void drawPDG(int m[MAX][MAX],int);
+
+int main()
+{ 
+ ofstream outfile;
+ ifstream infile;
+ ofstream DDG,CDG;
+ //input .cpp file
+ infile.open("wine_tester.cpp");
+ //open output file
+ outfile.open("file_output.txt");
+ //call function to calculate nmbr of decisions
+ calculate(outfile,infile);
+ //call function to number the code
+ number(infile,outfile);
+ //close output file
+ outfile.close();
+ ifstream input; 
+ //open numbred file
+ input.open("file_output.txt");
+ //open file for ddg matrix
+ DDG.open("ddg.txt");
+ //call func to find ddg matrix
+ dataDependance(input,DDG);
+ 
+ //CDG.open("cdg.txt");
+ //call func to find cdg matrix
+ cdg(input,CDG);
+ 
+ //close all open files
+ infile.close();
+ input.close();
+ 
+ getchar();
+ return 0;
+}
+
+
+//function to find dd matrix
+void dataDependance(ifstream& input,ofstream& DDG)
+{
+     
+     input.clear();
+     //outfile.seekg(0, ios_base::beg);
+     string v[20];//to store all variable names
+     char *p;
+     string num[20];
+     char  temp[512];//to read line
+     int i=0;
+     string j;
+     //start read sequentially
+     while(input)
+    {
+       input.getline(temp,512);
+       // if keywords found
+       if((strstr(temp, "int ")) != NULL || (strstr(temp, "float ")) != NULL || (strstr(temp, "bool ")) != NULL 
+         || (strstr(temp, "char ")) != NULL) //find any variable declaration
+       {
+            //ignore int main
+            if((strstr(temp, "int main()")) == NULL)//if not int main
+            {
+                p = strtok (temp," ,;.");//get line number
+                j=p;
+                p = strtok (NULL," ,;");//get space
+                p = strtok (NULL," ,;");
+                v[i]=p;//store variable name
+                num[i]=j;//store line number fro variable 
+                while (p!= NULL)
+                {     
+                    num[i]=j;//store line number fro variable
+                    v[i]=p;//store variable name
+                    i++;//increment subscript
+                    p = strtok (NULL, " ,;");//get next token
+                 }
+            }
+       }
+     }
+     
+     cout<<"\nVariables found";
+     for(int j=0;j<i;j++)
+     printf("\n%s",v[j].data());//print all variables
+     cout<<"\nVariables found at:";
+     for(int j=0;j<i;j++)
+     printf("\n%s",num[j].data());//print where thyey found
+     
+     //start for ddg
+     int k=-1;int z=i;
+     int m1[MAX][MAX];
+     
+     //initialize matrix for ddg
+     for(int l=0;l<lines;l++)
+        for(int t=0;t<lines;t++)
+          m1[l][t]=0;
+     
+     char temp1[20];
+     char temp2[20];
+     char temp3[20];
+     int r;
+     bool flagD=0,flagC,flagO;
+     while(z>0)//run for number of variables
+     {
+        z--;
+        r=-1;//initialize r
+        input.clear();
+        input.seekg(0, ios_base::beg);//go to beginning of file
+        k++;
+        printf("\n");
+        //temp1 temp2 has variable name
+        strcpy(temp1,v[k].data());
+        strcpy(temp3,v[k].data());
+        
+        strcpy(temp2,"&");
+        
+        //to prefix variable name with &
+        strcat(temp2,temp1);
+        
+        //to suffix variable with "="
+        strcat(temp1," =");
+        strcat(temp3," ==");
+        
+        bool flag=false;
+        flagD=flagC=flagO=0;
+        
+        //read file
+        while(input)
+        {
+            //read first line
+           input.getline(temp,512);
+           
+           //found open brkts
+           if((strstr(temp, "{")) != NULL) 
+           {
+              flagO=1;//set open flag
+           }
+           //found close brakt
+           if((strstr(temp, "}")) != NULL )//&& flagC==1) 
+           {
+              //if flag change is set
+              if(flagC==1)
+              flagD=1;//set close flag
+              else
+              flagO=flagD=0;//reset open and close flag
+           }
+           
+           //if variable on left or inputted
+           if(((strstr(temp, temp1)) != NULL  || (strstr(temp, temp2)) != NULL) && (strstr(temp, temp3)) == NULL)
+           {
+                std::string str(temp);
+                int pos;
+                pos=str.find("=");//if right string exist
+                std::string str3;
+                if(pos!=std::string::npos)
+                   str3 = str.substr (pos);//put right in str3
+                
+                //if for is found
+                if((strstr(temp, "for")) != NULL )
+                {
+                   p = strtok (temp,".");//get line nmbr
+                   int q=atoi(p);
+                   m1[q-1][q-1]=1;//set entry
+                   flag=true;//set flag bcoz variable is initialized
+                   r=q;
+                }
+                
+                else if(str3.find(v[k].data()) != std::string::npos && flag==true)//on both right and left
+                {
+                      p = strtok (temp,".");//get line nmbr
+                      int q=atoi(p);
+                      //it depends on earlier definition
+                      m1[q-1][r-1]=1;//set 1
+                      r=q;
+                      
+                      //it depends on same line
+                      m1[q-1][r-1]=1;
+                      //if brkt open and variable definition has changed
+                                               
+                }
+                
+                else
+                {
+                    flag=true;
+                    p = strtok (temp,".");//take line number 
+                    r =atoi(p);//store it in r
+                    
+                    //if variable initialized and used in same line
+                    if(str3.find(v[k].data()) != std::string::npos)
+                    {
+                        m1[r-1][r-1]=1;
+                    }
+                    //if brkt open and variable definition has changed
+                    if(flagO==1)
+                         flagC=1;
+                    //if brkt closed and variable is redefined
+                    if(flagD==1)
+                        flagO=flagD=flagC=0;
+                }
+           }
+           
+           //find variable but not on left
+           else if(flag==true)//if( ((strstr (temp, v[k].data()) ) != NULL) && (strstr(temp, temp1)) == NULL && r!=-1) 
+           {
+               std::string str(temp);
+               char temp4[10]="printf";
+               
+               int pos;
+               pos=str.find(temp4);
+               if(pos!= std::string::npos )
+               {
+                   char temp5[10]="\",";
+                   pos=str.find(temp5);
+                   if(pos!= std::string::npos )
+                      str = str.substr(pos+1); 
+               }
+               
+               pos=str.find(v[k].data());
+               
+               //if variable found
+               if(pos!= std::string::npos )
+               {
+                    char a,b;
+                    int len=strlen(v[k].data());
+                    //check char just before
+                    a=str[pos-1];
+                    //check char just after variable
+                    b=str[pos+len];
+                    //if suffix and prefix is anything other than alphabet
+                    if( int(a)<48 || (int(a)>57 && int(a)<65) || (int(a)>90 && int(a)<97) || int(a)>122)
+                       if( int(b)<48 || (int(b)>57 && int(b)<65) || (int(b)>90 && int(b)<97) || int(b)>122)
+                        {
+                             p = strtok (temp,".");//get line nmbr
+                             int q=atoi(p);
+                             
+                             m1[q-1][r-1]=1;//set 1
+                             //if varable has been changed inside any brkt
+                             //show its dependance on line before that control block
+                             if(flagD==1)
+                             {
+                                 for(int i=0;i<lines;i++)
+                                  if(m1[r-1][i]==1)
+                                     m1[q-1][i]=1;
+                             }
+                        }
+               }
+           }
+        }          
+     }
+     for(int l=0;l<lines;l++)
+     DDG<<"\t"<<l+1;
+    for(int l=0;l<lines;l++)
+    {
+        DDG<<"\n";
+        DDG<<l+1<<" ";
+        for(int t=0;t<lines;t++)
+        {
+           DDG<<"\t"<<m1[l][t];
+           M[l][t]=m1[l][t];
+        }
+    }
+    DDG.close();
+     drawGraph2(lines,m1);
+}
+
+void cdg (ifstream& input,ofstream& CDG)
+{
+     input.clear();
+     input.seekg(0, ios_base::beg);
+     CDG.open("cdg.txt");
+     char *p;
+     char  temp[512];
+     int m[MAX][MAX];
+     int q,r,flag=0;
+     
+     //initialize matrix
+     for(int l=0;l<lines;l++)
+       for(int t=0;t<lines;t++)
+         m[l][t]=0;
+     
+     //start reading file
+     while(input)
+     {
+       //if(top->info==-1)
+       //pop();
+       input.getline(temp,512);
+       if((strstr(temp, "case ")) != NULL)
+       {
+            //show dependance of case line
+            p = strtok (temp,".");//get line nmbr
+            r=atoi(p);
+            m[r-1][q-1]=2;
+            if(flag==1)
+            {
+              pop();
+              //q=top->info;
+              m[r-1][q-1]=2;
+            }       }
+       else if(flag==1 && (strstr(temp, "break; ")) != NULL)
+       {
+            p = strtok (temp,".");//get line nmbr
+            r=atoi(p);
+            m[r-1][q-1]=2;
+            
+       }
+       else if((strstr(temp, "{")) != NULL) 
+       {
+            p = strtok (temp,".");//get line nmbr
+            //push(atoi(p)-1);
+            q=top->info;
+            m[q][q-1]=2;
+       }
+       else if((strstr(temp, "}")) != NULL) 
+       {
+               p = strtok (temp,".");//get line nmbr
+               r=atoi(p);
+               m[r-1][q-1]=2;
+               pop();
+               if(flag==1)
+                 pop();
+               if(!isEmpty())
+               {
+                 q=top->info;
+               }
+       }
+       else //if(q!=0)
+       {
+            p = strtok (temp,".");//get line nmbr
+            r=atoi(p);
+            m[r-1][q-1]=2;
+       }
+    }
+    
+    for(int l=0;l<lines;l++)
+     CDG<<"\t"<<l+1;
+    for(int l=0;l<lines;l++)
+    {
+        CDG<<"\n";
+        CDG<<l+1<<" ";
+        for(int t=0;t<lines;t++)
+        {
+           CDG<<"\t"<<m[l][t];
+           //M[l][t]+=m[l][t];
+        }
+    }
+    pdg();
+    CDG.close();
+    drawGraph(m,lines);
+}
+void pop()
+{
+   node *p;
+   p=top;
+   top=top->next;
+}
+    
+bool isEmpty()
+{
+  if(top==NULL || bottom==NULL)
+    return true;
+  else
+    return false;
+} 
+
+
+
+
+
